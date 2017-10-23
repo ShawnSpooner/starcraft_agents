@@ -23,10 +23,10 @@ class LearningAgent(base_agent.BaseAgent):
         game = obs.observation["player"]
         allowed_actions = obs.observation["available_actions"]
 
-        screen = self.process(screen).unsqueeze(0)
-        minimap = self.process(minimap, features.MINIMAP_FEATURES).unsqueeze(0)
-        #kscreen = torch.from_numpy(screen).float().unsqueeze(0)
-        #minimap = torch.from_numpy(minimap).float().unsqueeze(0)
+        #screen = self.process(screen).unsqueeze(0)
+        #minimap = self.process(minimap, features.MINIMAP_FEATURES).unsqueeze(0)
+        screen = torch.from_numpy(screen).float().unsqueeze(0)
+        minimap = torch.from_numpy(minimap).float().unsqueeze(0)
         game = torch.log(torch.from_numpy(game).float().unsqueeze(0))
 
         return screen, minimap, game, torch.from_numpy(allowed_actions).long()

@@ -11,6 +11,7 @@ class SavedActions(object):
         self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.actions = torch.zeros(num_steps + 1, num_processes, 1).long()
+        self.spatials = torch.zeros(num_steps + 1, num_processes, 1).long()
         self.num_steps = num_steps
 
     def cuda(self):
@@ -18,14 +19,16 @@ class SavedActions(object):
         self.value_preds = self.value_preds.cuda()
         self.returns = self.returns.cuda()
         self.actions = self.actions.cuda()
+        self.spatials = self.spatials.cuda()
         self.masks = self.masks.cuda()
 
-    def insert(self, step, screen, minimap, gs, action, value_pred, reward, mask):
+    def insert(self, step, screen, minimap, gs, action, spatial, value_pred, reward, mask):
         self.screens[step].copy_(screen)
         self.minimaps[step].copy_(minimap)
         self.games[step].copy_(gs)
         self.value_preds[step].copy_(value_pred)
         self.actions[step].copy_(action)
+        self.spatials[step].copy_(spatial)
         self.rewards[step - 1].copy_(reward)
         self.masks[step].copy_(mask)
 
@@ -35,10 +38,11 @@ class SavedActions(object):
         self.games[index:] *= 0
         self.value_preds[index:] *= 0
         self.actions[index:] *= 0
+        self.spatials[index:] *= 0
         self.rewards[index:] *= 0
         self.masks[index:] *= 0
 
-    def compute_returns(self, next_value, gamma, tau):
+    def compute_returns(self, next_value, gamma):
         self.returns[-1] = next_value
         for step in reversed(range(self.rewards.size(0))):
             self.returns[step] = self.returns[step + 1] * \

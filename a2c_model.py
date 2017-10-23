@@ -23,8 +23,8 @@ class A2CModel(nn.Module):
         expirement_name = type(self).__name__
 
         # if we have an existing expirement with this name, clean it up first
-        if expirement_name in self.cc.get_experiment_names():
-            self.summary = self.cc.remove_experiment(expirement_name)
+        #if expirement_name in self.cc.get_experiment_names():
+        self.summary = self.cc.remove_experiment(expirement_name)
 
         self.summary = self.cc.create_experiment(expirement_name)
 
@@ -72,10 +72,8 @@ class A2CModel(nn.Module):
         action_scores = self.action_head(ns)
 
         # need to predict the spatial action policy here
-        spatial_x = F.softmax(self.spatial_y(ns))
-        expanded_x = spatial_x.repeat(self.screen_width, 1)
-        spatial_y = F.softmax(self.spatial_x(ns))
-        expanded_y = spatial_y.repeat(self.screen_height, 1).t()
+        expanded_x = self.spatial_x(ns).repeat(self.screen_width, 1)
+        expanded_y = self.spatial_y(ns).repeat(self.screen_height, 1).t()
 
         spatial = expanded_x * expanded_y
         return (action_scores,
@@ -92,18 +90,18 @@ class A2CModel(nn.Module):
 
         return state_value, available_actions[action], spatial
 
-    def evaluate_actions(self, screens, minimaps, games, actions):
+    def evaluate_actions(self, screens, minimaps, games, actions, spatials):
         logits, spatial_logits, values = self(screens, minimaps, games)
 
         log_probs = F.log_softmax(logits)
         probs = F.softmax(logits)
         action_log_probs = log_probs.gather(1, actions)
-        dist_entropy = -(log_probs * probs).sum(-1).mean()
+        dist_entropy = (log_probs * probs).sum(1).mean()
 
         spatial_log_probs = F.log_softmax(spatial_logits)
         spatial_probs = F.softmax(spatial_logits)
-        spatial_act_log_probs = spatial_log_probs.gather(1, actions)
-        spatial_dist_entropy = -(spatial_log_probs * spatial_probs).sum(-1).mean()
+        spatial_act_log_probs = spatial_log_probs.gather(1, spatials)
+        spatial_dist_entropy = (spatial_log_probs * spatial_probs).sum(1).mean()
 
         return (values, action_log_probs, dist_entropy,
                        spatial_act_log_probs, spatial_dist_entropy)

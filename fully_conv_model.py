@@ -87,12 +87,12 @@ class FullyConvModel(nn.Module):
         log_probs = F.log_softmax(logits)
         probs = F.softmax(logits)
         action_log_probs = log_probs.gather(1, actions)
-        dist_entropy = -(log_probs * probs).sum(-1).mean()
+        dist_entropy = (log_probs * probs).sum(1).mean()
 
         spatial_log_probs = F.log_softmax(spatial_logits)
         spatial_probs = F.softmax(spatial_logits)
         spatial_act_log_probs = spatial_log_probs.gather(1, actions)
-        spatial_dist_entropy = -(spatial_log_probs * spatial_probs).sum(-1).mean()
+        spatial_dist_entropy = (spatial_log_probs * spatial_probs).sum(1).mean()
 
         return (values, action_log_probs, dist_entropy,
                        spatial_act_log_probs, spatial_dist_entropy)
