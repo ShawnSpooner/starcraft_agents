@@ -41,7 +41,7 @@ class LearningAgent(base_agent.BaseAgent):
                 l = torch.log(torch.from_numpy(feature_layers[i] + np.finfo(float).eps))
                 l = l.unsqueeze(0).unsqueeze(0)
                 layers[i].copy_(l)
-            # other wise follow the paper and make it continous
+            # otherwise follow the paper and make it continous
             else:
                 #one hot encode the channel dimension
                 fl = torch.from_numpy(feature_layers[i])

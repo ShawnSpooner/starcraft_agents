@@ -15,19 +15,17 @@ from starcraft_agents.fully_conv_model import FullyConvModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-exp_num = 18
-
-Coordinate = namedtuple("Coordinate", ["x", "y"])
+expirement_name = "roaches_1"
 
 class A2CAgent(LearningAgent):
     """The start of a basic A2C agent for learning agents."""
-    def __init__(self, screen_width=84, screen_height=84, num_steps=100, num_processes=1, fully_conv=False):
+    def __init__(self, screen_width=84, screen_height=84, num_steps=64, num_processes=1, fully_conv=False):
         super(A2CAgent, self)
         num_functions = len(actions.FUNCTIONS)
         if fully_conv:
             self.model = FullyConvModel(num_functions=num_functions).cuda()
         else:
-            self.model =  A2CModel(num_functions=num_functions).cuda()
+            self.model =  A2CModel(num_functions=num_functions, expirement_name=expirement_name).cuda()
 
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -35,10 +33,11 @@ class A2CAgent(LearningAgent):
         self.num_processes = num_processes
         self.max_grad = 0.5
         self.entropy_coef = 0.01
-        self.value_loss_coef = 0.5
+        self.value_coef = 0.5
         self.episode_rewards = torch.zeros([num_processes, 1])
         self.final_rewards = torch.zeros([num_processes, 1])
         self.gamma = 0.99
+        self.tau = 0.97
         self.saved_actions = SavedActions(self.num_steps,
                                           self.num_processes,
                                           num_functions)
@@ -62,19 +61,16 @@ class A2CAgent(LearningAgent):
 
         screen, minimap, game, allowed_actions = self.preprocess(obs)
 
-        value_pred, action, spatial = self.model.act(Variable(screen).cuda(),
+        value_pred, action, x1, y1 = self.model.act(Variable(screen).cuda(),
                                                     Variable(minimap).cuda(),
                                                     Variable(game).cuda(),
                                                     Variable(allowed_actions).cuda())
         function_id = action.data[0]
 
-        xy_index = spatial.data[0,0]
-        spatial_pts = Coordinate(x=xy_index % self.screen_width, y=xy_index // self.screen_height)
-
         act_args = []
         for args in actions.FUNCTIONS[function_id].args:
             if args.name in ['screen', 'minimap', 'screen2']:
-                act_args.append([spatial_pts.x, spatial_pts.y])
+                act_args.append([x1.data[0,0], y1.data[0,0]])
             else:
                 act_args.append([0])
 
@@ -83,7 +79,7 @@ class A2CAgent(LearningAgent):
         self.final_rewards *= masks
         self.final_rewards += (1 - masks) * self.episode_rewards
 
-        self.saved_actions.insert(self.rollout_step, screen, minimap, game, action.data, spatial.data, value_pred.data, reward, masks)
+        self.saved_actions.insert(self.rollout_step, screen, minimap, game, action.data, x1.data, y1.data, value_pred.data, reward, masks)
 
         if self.rollout_step == self.num_steps:
             self.rollout()
@@ -99,51 +95,43 @@ class A2CAgent(LearningAgent):
         if self.steps > 1:
             self.rollout()
 
-        torch.save(self.model.state_dict(), f"./learning_agent_{exp_num}.pth")
+        torch.save(self.model.state_dict(), f"./{expirement_name}.pth")
         self.saved_actions.reset()
 
     def rollout(self):
+        if self.rollout_step < 1:
+            self.rollout_step = 0
+            return
+
         st = self.saved_actions
-        next_value = self.model(Variable(st.screens[-1]).cuda(),
-                                Variable(st.minimaps[-1]).cuda(),
-                                Variable(st.games[-1]).cuda())[2].data
 
-        self.saved_actions.compute_returns(next_value, self.gamma)
+        advantages = self.saved_actions.compute_returns(self.rollout_step, self.gamma, self.tau)
 
-        screens = Variable(st.screens[:-1].squeeze(1)).cuda()
-        minimaps = Variable(st.minimaps[:-1].squeeze(1)).cuda()
-        games = Variable(st.games[:-1].squeeze(1)).cuda()
-        actions = Variable(st.actions[:-1].view(-1, 1))
-        spatials = Variable(st.spatials[:-1].view(-1, 1))
+        screens = Variable(st.screens[:self.rollout_step].squeeze(1)).cuda()
+        minimaps = Variable(st.minimaps[:self.rollout_step].squeeze(1)).cuda()
+        games = Variable(st.games[:self.rollout_step].squeeze(1)).cuda()
+        actions = Variable(st.actions[:self.rollout_step].squeeze(1)).cuda()
+        x1s = Variable(st.x1s[:self.rollout_step].squeeze(1)).cuda()
+        y1s = Variable(st.y1s[:self.rollout_step].squeeze(1)).cuda()
 
-        values, a_lp, a_ent, sp_lp, sp_ent = self.model.evaluate_actions(screens, minimaps, games, actions, spatials)
+        values, logpac, entropy = self.model.evaluate_actions(screens, minimaps, games, actions, x1s, y1s)
 
-        values = values.view(self.num_steps, self.num_processes, 1)
-        advantages = Variable(self.saved_actions.returns[:-1]) - values
-        value_f_loss = advantages.pow(2).mean()
+        pg_loss = -(Variable(advantages).cuda() * logpac).mean()
+        pg_loss = pg_loss - self.entropy_coef * entropy
+        vf_loss = advantages.pow(2).mean()
 
-        action_log_probs = a_lp.view(self.num_steps, self.num_processes, 1)
-        action_loss = -(Variable(advantages.data) * action_log_probs).mean()
-
-        spatial_log_probs = sp_lp.view(self.num_steps, self.num_processes, 1)
-        spatial_loss = -(Variable(advantages.data) * spatial_log_probs).mean()
-
-        full_loss = (value_f_loss * self.value_loss_coef
-            + (action_loss + a_ent * self.entropy_coef)
-            + (spatial_loss + sp_ent * self.entropy_coef))
+        train_loss = pg_loss + self.value_coef * vf_loss
 
         self.optimizer.zero_grad()
-        full_loss.backward()
+        train_loss.backward()
 
         nn.utils.clip_grad_norm(self.model.parameters(), self.max_grad)
 
         self.optimizer.step()
 
         self.model.summary.add_scalar_value("reward", int(self.reward))
-        self.model.summary.add_scalar_value("value_loss", value_f_loss.data[0])
-        self.model.summary.add_scalar_value("action_loss", action_loss.data[0])
-        self.model.summary.add_scalar_value("spatial_loss", spatial_loss.data[0])
-        self.model.summary.add_scalar_value("loss", full_loss.data[0])
+        self.model.summary.add_scalar_value("value_loss", vf_loss)
+        self.model.summary.add_scalar_value("loss", train_loss.data[0])
 
         # if we are still running an episode, copy over the state to position zero
         last_full_action = self.rollout_step

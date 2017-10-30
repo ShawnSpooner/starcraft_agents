@@ -13,18 +13,17 @@ from collections import namedtuple
 
 
 class A2CModel(nn.Module):
-    def __init__(self, num_functions, screen_width=84, screen_height=84):
+    def __init__(self, num_functions, expirement_name, screen_width=84, screen_height=84):
         super(A2CModel, self).__init__()
         self.num_functions = num_functions
         self.screen_width = screen_width
         self.screen_height = screen_height
 
         self.cc = CrayonClient(hostname="localhost")
-        expirement_name = type(self).__name__
 
         # if we have an existing expirement with this name, clean it up first
-        #if expirement_name in self.cc.get_experiment_names():
-        self.summary = self.cc.remove_experiment(expirement_name)
+        if expirement_name in self.cc.get_experiment_names():
+            self.summary = self.cc.remove_experiment(expirement_name)
 
         self.summary = self.cc.create_experiment(expirement_name)
 
@@ -72,36 +71,41 @@ class A2CModel(nn.Module):
         action_scores = self.action_head(ns)
 
         # need to predict the spatial action policy here
-        expanded_x = self.spatial_x(ns).repeat(self.screen_width, 1)
-        expanded_y = self.spatial_y(ns).repeat(self.screen_height, 1).t()
+        x1 = self.spatial_x(ns)
+        y1 = self.spatial_y(ns)
 
-        spatial = expanded_x * expanded_y
-        return (action_scores,
-               spatial.view(-1, self.screen_height*self.screen_width),
-               state_values)
+        return (action_scores, x1, y1, state_values)
 
     def act(self, state, minimap, game_state, available_actions):
-        action_logits, spatial_probs, state_value = self(state,
+        action_logits, x1_logits, y1_logits, state_value = self(state,
                                                          minimap,
                                                          game_state)
 
         action = F.softmax(action_logits.squeeze(0).gather(0, available_actions)).multinomial()
-        spatial = F.softmax(spatial_probs).multinomial()
+        x1 = F.softmax(x1_logits).multinomial()
+        y1 = F.softmax(y1_logits).multinomial()
 
-        return state_value, available_actions[action], spatial
+        return state_value, available_actions[action], x1, y1
 
-    def evaluate_actions(self, screens, minimaps, games, actions, spatials):
-        logits, spatial_logits, values = self(screens, minimaps, games)
+    def evaluate_actions(self, screens, minimaps, games, actions, x1s, y1s):
+        logits, x1_logits, y1_logits, values = self(screens, minimaps, games)
 
         log_probs = F.log_softmax(logits)
         probs = F.softmax(logits)
         action_log_probs = log_probs.gather(1, actions)
         dist_entropy = (log_probs * probs).sum(1).mean()
 
-        spatial_log_probs = F.log_softmax(spatial_logits)
-        spatial_probs = F.softmax(spatial_logits)
-        spatial_act_log_probs = spatial_log_probs.gather(1, spatials)
-        spatial_dist_entropy = (spatial_log_probs * spatial_probs).sum(1).mean()
+        x1_log_probs = F.log_softmax(x1_logits)
+        x1_probs = F.softmax(x1_logits)
+        x1_act_lp = (x1_log_probs * x1_probs).gather(1, x1s)
+        x1_entropy = (x1_log_probs * x1_probs).sum(1).mean()
 
-        return (values, action_log_probs, dist_entropy,
-                       spatial_act_log_probs, spatial_dist_entropy)
+        y1_log_probs = F.log_softmax(y1_logits)
+        y1_probs = F.softmax(y1_logits)
+        y1_act_lp = (y1_log_probs * y1_probs).gather(1, y1s)
+        y1_entropy = (y1_log_probs * y1_probs).sum(1).mean()
+
+        logpac = action_log_probs + x1_act_lp + y1_act_lp
+        entropy = dist_entropy + x1_entropy + y1_entropy
+
+        return values, logpac, entropy

@@ -8,27 +8,30 @@ class SavedActions(object):
         self.games = torch.zeros(num_steps + 1, num_processes, 11)
         self.masks = torch.zeros(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
-        self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
+        self.values = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.actions = torch.zeros(num_steps + 1, num_processes, 1).long()
-        self.spatials = torch.zeros(num_steps + 1, num_processes, 1).long()
+        self.x1s = torch.zeros(num_steps + 1, num_processes, 1).long()
+        self.y1s = torch.zeros(num_steps + 1, num_processes, 1).long()
         self.num_steps = num_steps
 
     def cuda(self):
         self.rewards = self.rewards.cuda()
-        self.value_preds = self.value_preds.cuda()
+        self.values = self.values.cuda()
         self.returns = self.returns.cuda()
         self.actions = self.actions.cuda()
-        self.spatials = self.spatials.cuda()
+        self.x1s = self.x1s.cuda()
+        self.y1s = self.y1s.cuda()
         self.masks = self.masks.cuda()
 
-    def insert(self, step, screen, minimap, gs, action, spatial, value_pred, reward, mask):
+    def insert(self, step, screen, minimap, gs, action, x1, y1, value_pred, reward, mask):
         self.screens[step].copy_(screen)
         self.minimaps[step].copy_(minimap)
         self.games[step].copy_(gs)
-        self.value_preds[step].copy_(value_pred)
+        self.values[step].copy_(value_pred)
         self.actions[step].copy_(action)
-        self.spatials[step].copy_(spatial)
+        self.x1s[step].copy_(x1)
+        self.y1s[step].copy_(y1)
         self.rewards[step - 1].copy_(reward)
         self.masks[step].copy_(mask)
 
@@ -36,14 +39,29 @@ class SavedActions(object):
         self.screens[index:] *= 0
         self.minimaps[index:] *= 0
         self.games[index:] *= 0
-        self.value_preds[index:] *= 0
+        self.values[index:] *= 0
         self.actions[index:] *= 0
-        self.spatials[index:] *= 0
+        self.x1s[index:] *= 0
+        self.y1s[index:] *= 0
         self.rewards[index:] *= 0
         self.masks[index:] *= 0
 
-    def compute_returns(self, next_value, gamma):
-        self.returns[-1] = next_value
-        for step in reversed(range(self.rewards.size(0))):
-            self.returns[step] = self.returns[step + 1] * \
-                gamma * self.masks[step] + self.rewards[step]
+    def compute_returns(self, end_step, gamma, tau):
+        returns = torch.Tensor(end_step, 1)
+        deltas = torch.Tensor(end_step, 1)
+        advantages = torch.Tensor(end_step, 1)
+
+        prev_return = 0
+        prev_value = 0
+        prev_advantage = 0
+
+        for i in reversed(range(end_step)):
+            returns[i] = self.rewards[i] + gamma * prev_return
+            deltas[i] = self.rewards[i] + gamma * prev_value - self.values[i]
+            advantages[i] = deltas[i] + gamma * tau * prev_advantage
+
+            prev_return = returns[i, 0]
+            prev_value = self.values[i, 0]
+            prev_advantage = advantages[i, 0]
+
+        return advantages
