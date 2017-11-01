@@ -44,6 +44,7 @@ class SavedActions(object):
         self.x1s[index:] *= 0
         self.y1s[index:] *= 0
         self.rewards[index:] *= 0
+        self.returns[index:] *= 0
         self.masks[index:] *= 0
 
     def compute_returns(self, end_step, gamma, tau):
@@ -56,11 +57,11 @@ class SavedActions(object):
         prev_advantage = 0
 
         for i in reversed(range(end_step)):
-            returns[i] = self.rewards[i] + gamma * prev_return
+            self.returns[i] = self.rewards[i] + gamma * prev_return
             deltas[i] = self.rewards[i] + gamma * prev_value - self.values[i]
             advantages[i] = deltas[i] + gamma * tau * prev_advantage
 
-            prev_return = returns[i, 0]
+            prev_return = self.returns[i, 0]
             prev_value = self.values[i, 0]
             prev_advantage = advantages[i, 0]
 

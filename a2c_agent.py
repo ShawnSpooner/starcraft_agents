@@ -15,7 +15,7 @@ from starcraft_agents.fully_conv_model import FullyConvModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-expirement_name = "roaches_1"
+expirement_name = "zerglings_preprocess"
 
 class A2CAgent(LearningAgent):
     """The start of a basic A2C agent for learning agents."""
@@ -25,7 +25,7 @@ class A2CAgent(LearningAgent):
         if fully_conv:
             self.model = FullyConvModel(num_functions=num_functions).cuda()
         else:
-            self.model =  A2CModel(num_functions=num_functions, expirement_name=expirement_name).cuda()
+            self.model = A2CModel(num_functions=num_functions, expirement_name=expirement_name).cuda()
 
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -43,7 +43,7 @@ class A2CAgent(LearningAgent):
                                           num_functions)
         self.saved_actions.cuda()
         self.rollout_step = 0
-        #self.model.load_state_dict(torch.load(f"./learning_agent_{exp_num}.pth"))
+        #self.model.load_state_dict(torch.load(f"./{expirement_name}.pth"))
         #self.model.eval()
         self.optimizer = optim.RMSprop(self.model.parameters(),
                                         lr=7e-4,

@@ -23,10 +23,10 @@ class LearningAgent(base_agent.BaseAgent):
         game = obs.observation["player"]
         allowed_actions = obs.observation["available_actions"]
 
-        #screen = self.process(screen).unsqueeze(0)
-        #minimap = self.process(minimap, features.MINIMAP_FEATURES).unsqueeze(0)
-        screen = torch.from_numpy(screen).float().unsqueeze(0)
-        minimap = torch.from_numpy(minimap).float().unsqueeze(0)
+        screen = self.process(screen).unsqueeze(0)
+        minimap = self.process(minimap, features.MINIMAP_FEATURES).unsqueeze(0)
+        #screen = torch.from_numpy(screen).float().unsqueeze(0)
+        #minimap = torch.from_numpy(minimap).float().unsqueeze(0)
         game = torch.log(torch.from_numpy(game).float().unsqueeze(0))
 
         return screen, minimap, game, torch.from_numpy(allowed_actions).long()
@@ -39,20 +39,21 @@ class LearningAgent(base_agent.BaseAgent):
             # if the feature layer type is scalar, log scale it
             if feature_space[i].type == features.FeatureType.SCALAR:
                 l = torch.log(torch.from_numpy(feature_layers[i] + np.finfo(float).eps))
-                l = l.unsqueeze(0).unsqueeze(0)
                 layers[i].copy_(l)
             # otherwise follow the paper and make it continous
             else:
+                l = torch.from_numpy(feature_layers[i] / feature_space[i].scale)
+                layers[i].copy_(l)
                 #one hot encode the channel dimension
-                fl = torch.from_numpy(feature_layers[i])
-                channels = feature_space[i].scale
-                fl_ = torch.unsqueeze(fl, 0).long()
+                #fl = torch.from_numpy(feature_layers[i])
+                #3channels = feature_space[i].scale
+                #fl_ = torch.unsqueeze(fl, 0).long()
 
-                one_hot = torch.FloatTensor(channels, screen_width, screen_height).zero_()
-                one_hot.scatter_(0, fl_, 1)
+                #one_hot = torch.FloatTensor(channels, screen_width, screen_height).zero_()
+                #one_hot.scatter_(0, fl_, 1)
 
-                m = nn.Conv2d(channels, 1, 1, stride=1).cuda()
-                l = m(Variable(one_hot.unsqueeze(0)).cuda())
-                layers[i].copy_(l.data)
+                ##m = nn.Conv2d(channels, 1, 1, stride=1).cuda()
+                #l = m(Variable(one_hot.unsqueeze(0)).cuda())
+                #layers[i].copy_(l.data)
 
         return layers
