@@ -19,7 +19,7 @@ expirement_name = "ppo_zerglings_pre"
 
 class PPOAgent(LearningAgent):
     """The start of a basic PPO agent for Starcraft."""
-    def __init__(self, screen_width=84, screen_height=84, horizon=100, num_processes=1):
+    def __init__(self, screen_width=84, screen_height=84, horizon=64, num_processes=1):
         super(PPOAgent, self)
         num_functions = len(actions.FUNCTIONS)
         self.model = PPOModel(num_functions=num_functions, expirement_name=expirement_name).cuda()

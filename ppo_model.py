@@ -37,12 +37,12 @@ class PPOModel(nn.Module):
 
         self.feature_input = nn.Linear(11, 128)
 
-        self.fc = nn.Linear(5312, 256)
-        self.action_head = nn.Linear(256, self.num_functions)
-        self.value_head = nn.Linear(256, 1)
+        self.fc = nn.Linear(5312, 1024)
+        self.action_head = nn.Linear(1024, self.num_functions)
+        self.value_head = nn.Linear(1024, 1)
 
-        self.screen_x1 = nn.Linear(256, 84)
-        self.screen_y1 = nn.Linear(256, 84)
+        self.screen_x1 = nn.Linear(1024, 84)
+        self.screen_y1 = nn.Linear(1024, 84)
 
     def forward(self, screen, mm, game):
         # screen network
@@ -88,17 +88,17 @@ class PPOModel(nn.Module):
         log_probs = F.log_softmax(logits)
         probs = F.softmax(logits)
         action_log_probs = log_probs.gather(1, actions)
-        dist_entropy = -(log_probs * probs).sum(-1).mean()
+        dist_entropy = (log_probs * probs).sum(-1).mean()
 
         x1_log_probs = F.log_softmax(x1_logits)
         x1_probs = F.softmax(x1_logits)
         x1_act_lp = (x1_log_probs * x1_probs).gather(1, x1s)
-        x1_entropy = -(x1_log_probs * x1_probs).sum(-1).mean()
+        x1_entropy = (x1_log_probs * x1_probs).sum(-1).mean()
 
         y1_log_probs = F.log_softmax(y1_logits)
         y1_probs = F.softmax(y1_logits)
         y1_act_lp = (y1_log_probs * y1_probs).gather(1, y1s)
-        y1_entropy = -(y1_log_probs * y1_probs).sum(-1).mean()
+        y1_entropy = (y1_log_probs * y1_probs).sum(-1).mean()
 
         logpac = action_log_probs + x1_act_lp + y1_act_lp
         entropy = dist_entropy + x1_entropy + y1_entropy

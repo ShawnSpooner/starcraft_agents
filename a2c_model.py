@@ -36,12 +36,12 @@ class A2CModel(nn.Module):
 
         self.feature_input = nn.Linear(11, 128)
 
-        self.fc = nn.Linear(5312, 256)
-        self.action_head = nn.Linear(256, self.num_functions)
-        self.value_head = nn.Linear(256, 1)
+        self.fc = nn.Linear(5312, 512)
+        self.action_head = nn.Linear(512, self.num_functions)
+        self.value_head = nn.Linear(512, 1)
 
-        self.spatial_x = nn.Linear(256, 84)
-        self.spatial_y = nn.Linear(256, 84)
+        self.spatial_x = nn.Linear(512, 84)
+        self.spatial_y = nn.Linear(512, 84)
 
         self.saved_actions = []
         self.rewards = []

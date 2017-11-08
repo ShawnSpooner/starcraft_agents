@@ -44,16 +44,18 @@ class LearningAgent(base_agent.BaseAgent):
             else:
                 l = torch.from_numpy(feature_layers[i] / feature_space[i].scale)
                 layers[i].copy_(l)
-                #one hot encode the channel dimension
-                #fl = torch.from_numpy(feature_layers[i])
-                #3channels = feature_space[i].scale
-                #fl_ = torch.unsqueeze(fl, 0).long()
-
-                #one_hot = torch.FloatTensor(channels, screen_width, screen_height).zero_()
-                #one_hot.scatter_(0, fl_, 1)
-
-                ##m = nn.Conv2d(channels, 1, 1, stride=1).cuda()
-                #l = m(Variable(one_hot.unsqueeze(0)).cuda())
-                #layers[i].copy_(l.data)
 
         return layers
+
+    def embed(self, feature_layers, embedding_dim=5, feature_space=features.SCREEN_FEATURES):
+         layer_count, screen_width, screen_height = feature_layers.shape
+         layers = torch.zeros(layer_count, 5, screen_width, screen_height)
+
+         for i in range(layer_count):
+             embedding = nn.Embedding(feature_space[i].scale, 5)
+             embedded = embedding(Variable(torch.from_numpy(feature_layers[i])).long()).cuda()
+             e = embedded.view(-1, 5, screen_width, screen_height)
+
+             layers[i].copy_(e.data)
+
+         return layers

@@ -15,7 +15,7 @@ from starcraft_agents.fully_conv_model import FullyConvModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-expirement_name = "zerglings_preprocess"
+expirement_name = "collect_minerals"
 
 class A2CAgent(LearningAgent):
     """The start of a basic A2C agent for learning agents."""
