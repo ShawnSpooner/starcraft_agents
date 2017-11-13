@@ -15,12 +15,12 @@ from starcraft_agents.fully_conv_model import FullyConvModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-expirement_name = "pr_a2c_lings_2"
+expirement_name = "pr_lings_2"
 
 class A2CAgent(LearningAgent):
     """The start of a basic A2C agent for learning agents."""
-    def __init__(self, screen_width=64, screen_height=64, num_steps=40, num_processes=1, fully_conv=False, expirement_name=expirement_name):
-        super(A2CAgent, self).__init__(create_experiment)
+    def __init__(self, screen_width=64, screen_height=64, horizon=40, num_processes=1, fully_conv=False, expirement_name=expirement_name):
+        super(A2CAgent, self).__init__(expirement_name)
         num_functions = len(actions.FUNCTIONS)
         if fully_conv:
             self.model = FullyConvModel(num_functions=num_functions,
@@ -35,16 +35,16 @@ class A2CAgent(LearningAgent):
 
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.num_steps = num_steps
+        self.horizon = horizon
         self.num_processes = num_processes
-        self.max_grad = 0.5
+        self.max_grad = 0.6  # was 0.5
         self.entropy_coef = 0.01
         self.value_coef = 0.5
         self.episode_rewards = torch.zeros([num_processes, 1])
         self.final_rewards = torch.zeros([num_processes, 1])
         self.gamma = 0.99
         self.tau = 0.97
-        self.saved_actions = SavedActions(self.num_steps,
+        self.saved_actions = SavedActions(self.horizon,
                                           self.num_processes,
                                           num_functions)
         self.saved_actions.cuda()

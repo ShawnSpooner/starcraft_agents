@@ -13,9 +13,10 @@ from torch.autograd import Variable
 
 from pycrayon import CrayonClient
 
+
 class LearningAgent(base_agent.BaseAgent):
 
-    def build_embeddings(self, feature_space, embedding_dim=5):
+    def build_embeddings(self, feature_space, embedding_dim=8):
         """
         Build up a list of the embeddings for each layer in the supplied
         feature collections
@@ -43,8 +44,6 @@ class LearningAgent(base_agent.BaseAgent):
         game = obs.observation["player"]
         allowed_actions = obs.observation["available_actions"]
 
-        #screen = self.process(screen).unsqueeze(0)
-        #minimap = self.process(minimap, features.MINIMAP_FEATURES).unsqueeze(0)
         screen = self.embed(screen, space="screen").unsqueeze(0)
         minimap = self.embed(minimap, space="minimap").unsqueeze(0)
         game = torch.log(torch.from_numpy(game).float().unsqueeze(0))
@@ -67,17 +66,17 @@ class LearningAgent(base_agent.BaseAgent):
 
         return layers
 
-    def embed(self, feature_layers, embedding_dim=5, space="screen"):
+    def embed(self, feature_layers, embedding_dim=8, space="screen"):
         layer_count, screen_width, screen_height = feature_layers.shape
         layers = torch.zeros(1, embedding_dim, screen_width, screen_height)
         feature_space = features.SCREEN_FEATURES if space == "screen" else features.MINIMAP_FEATURES
-
+        # layers we are using: player_id, player_relative, selected, unit_type
         for i in range(layer_count):
             # quick filter to only include the core layers needed to bootstrap an agent
             if feature_space[i].name == "player_relative":
                 embedding = self.embeddings[space][i]
-                embedded = embedding(Variable(torch.from_numpy(feature_layers[i])).long()).cuda()
-                layers[0].copy_(embedded.data)
+                embedded = embedding(Variable(torch.from_numpy(feature_layers[i])).long())
+                layers[0] = embedded.view(1, 8, self.screen_height, self.screen_width).data
         return layers
 
     def step(self, obs):
@@ -90,19 +89,28 @@ class LearningAgent(base_agent.BaseAgent):
         screen, minimap, game, allowed_actions = self.preprocess(obs)
 
         value_pred, action, x1, y1 = self.model.act(Variable(screen).cuda(),
-                                                     Variable(minimap).cuda(),
-                                                     Variable(game).cuda(),
-                                                     Variable(allowed_actions).cuda())
+                                                    Variable(minimap).cuda(),
+                                                    Variable(game).cuda(),
+                                                    Variable(allowed_actions).cuda())
         function_id = action.data[0]
         act_args = []
         for args in actions.FUNCTIONS[function_id].args:
             if args.name in ['screen', 'minimap', 'screen2']:
-                act_args.append([x1.data[0,0], y1.data[0,0]])
+                act_args.append([x1.data[0, 0], y1.data[0, 0]])
             else:
                 act_args.append([0])
 
         mask = torch.FloatTensor([0.0] if obs.step_type == 2 else [1.0])
-        self.saved_actions.insert(self.rollout_step, screen, minimap, game, action.data, x1.data, y1.data, value_pred.data, reward, mask)
+        self.saved_actions.insert(self.rollout_step,
+                                  screen,
+                                  minimap,
+                                  game,
+                                  action.data,
+                                  x1.data,
+                                  y1.data,
+                                  value_pred.data,
+                                  reward,
+                                  mask)
 
         if self.rollout_step == self.horizon:
             self.rollout()
@@ -111,7 +119,8 @@ class LearningAgent(base_agent.BaseAgent):
 
     def reset(self):
         super(LearningAgent, self).reset()
-        self.model.summary.add_scalar_value("episode_reward", int(self.episode_rewards[0,0]))
+        self.model.summary.add_scalar_value("episode_reward",
+                                            int(self.episode_rewards[0, 0]))
         self.episode_rewards = torch.zeros(1, 1)
 
         if self.steps > 1:

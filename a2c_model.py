@@ -15,7 +15,7 @@ from collections import namedtuple
 class A2CModel(nn.Module):
     def __init__(self, num_functions, expirement_name, screen_width, screen_height):
         super(A2CModel, self).__init__()
-        self.neglogp= nn.CrossEntropyLoss(reduce=False)
+        self.neglogp = nn.CrossEntropyLoss(reduce=False)
         self.num_functions = num_functions
         self.screen_width = screen_width
         self.screen_height = screen_height

@@ -15,7 +15,7 @@ from starcraft_agents.ppo_model import PPOModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-expirement_name = "pr_ppo_lings_5"
+expirement_name = "pr_ppo_lings_1"
 
 
 class PPOAgent(LearningAgent):
