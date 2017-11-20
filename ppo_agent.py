@@ -15,7 +15,7 @@ from starcraft_agents.ppo_model import PPOModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-expirement_name = "pr_ppo_lings_1"
+expirement_name = "ppo_lings_1"
 
 
 class PPOAgent(LearningAgent):
@@ -35,6 +35,7 @@ class PPOAgent(LearningAgent):
         self.gamma = 0.99
         self.tau = 0.97
         self.entropy_coef = 0.01
+        self.value_coef = 0.
         self.clip_param = 0.2
         self.saved_actions = SavedActions(self.horizon,
                                           1,
@@ -58,26 +59,38 @@ class PPOAgent(LearningAgent):
         x1s = Variable(st.x1s[:self.rollout_step].squeeze(1)).cuda()
         y1s = Variable(st.y1s[:self.rollout_step].squeeze(1)).cuda()
 
-        values, new_neglogp, dist_entropy = self.model.evaluate_actions(screens, minimaps, games, actions, x1s, y1s)
-        _, old_neglogp, _ = self.old_model.evaluate_actions(screens, minimaps, games, actions, x1s, y1s)
+        values, entropy, lp, x_lp, y_lp = self.model.evaluate_actions(screens, minimaps, games, actions, x1s, y1s)
+        old_values, _, old_lp, old_xlp, old_ylp = self.old_model.evaluate_actions(screens, minimaps, games, actions, x1s, y1s)
 
-        ratio = torch.exp(new_neglogp - old_neglogp)
-        adv_targ = Variable(advantages.view(-1, 1)).cuda()
-        surr1 = ratio * adv_targ
-        surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-        action_loss = -torch.min(surr1, surr2).mean() # PPO's pessimistic surrogate (L^CLIP)
-        policy_entp = (-self.entropy_coef) * dist_entropy.mean()
+        adv = Variable(advantages.view(-1, 1)).cuda()
+        R = Variable(st.rewards[::self.rollout_step]).cuda()
+        vpredclipped = old_values + torch.clamp(values - old_values, - self.clip_param, self.clip_param)
+        vf_losses1 = (values - R).pow(2)
+        vf_losses2 = (vpredclipped - R).pow(2)
+        vf_loss = .5 * torch.max(vf_losses1, vf_losses2).mean()
 
-        value_loss = (values - Variable(st.returns[:self.rollout_step]).cuda()).pow(2).mean()
+        def ppo_loss(lp, oldlp):
+            ratio = torch.exp(oldlp - lp)
+            pg_losses = -adv * ratio
+            pg_losses2 = -adv * torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param)
+            pg_loss = torch.max(pg_losses, pg_losses2).mean()
+            #approxkl = .5 * (lp - old_lp).pow(2).mean()
+            #clipfrac = torch.max(torch.abs(ratio - 1.0), self.clip_param).mean()
+            return pg_loss
+
+        dist_entp = self.entropy_coef * entropy.mean()
+        function_loss = ppo_loss(lp, old_lp)
+        x1_loss = ppo_loss(lp, old_lp)
+        y1_loss = ppo_loss(lp, old_lp)
 
         self.optimizer.zero_grad()
-        total_loss = (value_loss + action_loss + policy_entp)
+        total_loss = function_loss + x1_loss + y1_loss - dist_entp + vf_loss * self.value_coef
         total_loss.backward()
         self.optimizer.step()
 
         self.model.summary.add_scalar_value("reward", int(self.reward))
         self.model.summary.add_scalar_value("loss", total_loss.data[0])
-        self.model.summary.add_scalar_value("dist_entropy", policy_entp.data[0])
-        self.model.summary.add_scalar_value("value_loss", value_loss.data[0])
+        self.model.summary.add_scalar_value("dist_entropy", dist_entp.data[0])
+        self.model.summary.add_scalar_value("value_loss", vf_loss.data[0])
 
         self.rollout_step = 0

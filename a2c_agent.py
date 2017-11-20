@@ -15,7 +15,7 @@ from starcraft_agents.fully_conv_model import FullyConvModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-expirement_name = "pr_lings_2"
+expirement_name = "lings_1"
 
 class A2CAgent(LearningAgent):
     """The start of a basic A2C agent for learning agents."""
@@ -37,7 +37,7 @@ class A2CAgent(LearningAgent):
         self.screen_height = screen_height
         self.horizon = horizon
         self.num_processes = num_processes
-        self.max_grad = 0.6  # was 0.5
+        self.max_grad = 0.6
         self.entropy_coef = 0.01
         self.value_coef = 0.5
         self.episode_rewards = torch.zeros([num_processes, 1])
@@ -51,7 +51,7 @@ class A2CAgent(LearningAgent):
         #self.model.load_state_dict(torch.load(f"./{expirement_name}.pth"))
         #self.model.eval()
         self.optimizer = optim.RMSprop(self.model.parameters(),
-                                        lr=7e-4,
+                                        lr=7e-3,
                                         eps=1e-10,
                                         alpha=0.99)
         self.final_rewards = torch.zeros(1, 1)

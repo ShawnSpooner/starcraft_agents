@@ -16,7 +16,7 @@ from collections import namedtuple
 class PPOModel(nn.Module):
     def __init__(self, num_functions, expirement_name, screen_width=64, screen_height=64):
         super(PPOModel, self).__init__()
-        self.neglogp= nn.CrossEntropyLoss(reduce=False)
+        self.neglogp= nn.CrossEntropyLoss()
         self.num_functions = num_functions
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -30,10 +30,10 @@ class PPOModel(nn.Module):
         self.summary = self.cc.create_experiment(expirement_name)
 
         # our model specification
-        self.conv1 = nn.Conv3d(1, 16, kernel_size=8, stride=4)
+        self.conv1 = nn.Conv2d(16, 16, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
 
-        self.mm_conv1 = nn.Conv3d(1, 16, kernel_size=8, stride=4)
+        self.mm_conv1 = nn.Conv2d(16, 16, kernel_size=8, stride=4)
         self.mm_conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
 
         self.feature_input = nn.Linear(11, 128)
@@ -76,10 +76,10 @@ class PPOModel(nn.Module):
 
     def act(self, state, minimap, game_state, available_actions):
         action_logits, x1_logits, y1_logits, value = self(state, minimap, game_state)
-        action = F.softmax(action_logits.squeeze(0).gather(0, available_actions), dim=0).multinomial()
+        action = F.softmax(action_logits.squeeze(0).gather(0, available_actions)).multinomial()
 
-        x1 = F.softmax(x1_logits, dim=0).multinomial()
-        y1 = F.softmax(y1_logits, dim=0).multinomial()
+        x1 = F.softmax(x1_logits).multinomial()
+        y1 = F.softmax(y1_logits).multinomial()
 
         return value, available_actions[action], x1, y1
 
@@ -93,19 +93,19 @@ class PPOModel(nn.Module):
     def evaluate_actions(self, screens, minimaps, games, actions, x1s, y1s):
         logits, x1_logits, y1_logits, values = self(screens, minimaps, games)
 
-        log_probs = F.log_softmax(logits, dim=1)
+        #log_probs = F.log_softmax(logits, dim=1)
         action_nlp = self.neglogp(logits, actions.squeeze(1))
         dist_entropy = self.entropy(logits)
 
-        x1_log_probs = F.log_softmax(x1_logits, dim=1)
+        ##1_log_probs = F.log_softmax(x1_logits, dim=1)
         x1_nlp = self.neglogp(x1_logits, x1s.squeeze(1))
         x1_entropy = self.entropy(x1_logits)
 
-        y1_log_probs = F.log_softmax(y1_logits, dim=1)
+        #y1_log_probs = F.log_softmax(y1_logits, dim=1)
         y1_nlp = self.neglogp(y1_logits, y1s.squeeze(1))
         y1_entropy = self.entropy(y1_logits)
 
-        neg_logpac = action_nlp + x1_nlp + y1_nlp
+        #neg_logpac = action_nlp + x1_nlp + y1_nlp
         entropy = dist_entropy + x1_entropy + y1_entropy
 
-        return values, neg_logpac, entropy
+        return values, entropy, action_nlp, x1_nlp, y1_nlp

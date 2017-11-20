@@ -27,7 +27,7 @@ class LearningAgent(base_agent.BaseAgent):
         @param embedding_dim how many dimensions to encode the categorical
                features into
         """
-        return [nn.Embedding(layer.scale, embedding_dim) for layer in feature_space]
+        return {layer.name: nn.Embedding(layer.scale, embedding_dim) for layer in feature_space}
 
     def __init__(self, expirement_name):
         super(LearningAgent, self).__init__()
@@ -68,16 +68,21 @@ class LearningAgent(base_agent.BaseAgent):
 
     def embed(self, feature_layers, embedding_dim=8, space="screen"):
         layer_count, screen_width, screen_height = feature_layers.shape
-        layers = torch.zeros(1, embedding_dim, screen_width, screen_height)
+
         feature_space = features.SCREEN_FEATURES if space == "screen" else features.MINIMAP_FEATURES
         # layers we are using: player_id, player_relative, selected, unit_type
-        for i in range(layer_count):
-            # quick filter to only include the core layers needed to bootstrap an agent
-            if feature_space[i].name == "player_relative":
-                embedding = self.embeddings[space][i]
-                embedded = embedding(Variable(torch.from_numpy(feature_layers[i])).long())
-                layers[0] = embedded.view(1, 8, self.screen_height, self.screen_width).data
-        return layers
+        allowed_layers = ["player_relative", "visibility_map"]
+        layers = torch.zeros(len(allowed_layers), embedding_dim, screen_width, screen_height)
+        current_layer = 0
+
+        for l in feature_space:
+            if l.name in allowed_layers:
+                embedding = self.embeddings[space][l.name]
+                embedded = embedding(Variable(torch.from_numpy(feature_layers[l.index])).long())
+                layers[current_layer] = embedded.view(1, 8, self.screen_height, self.screen_width).data
+                current_layer += 1
+
+        return torch.cat(layers, dim=0)
 
     def step(self, obs):
         super(LearningAgent, self).step(obs)
