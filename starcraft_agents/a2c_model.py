@@ -37,7 +37,7 @@ class A2CModel(nn.Module):
 
         self.feature_input = nn.Linear(11, 128)
 
-        self.fc = nn.Linear(2432, 512)
+        self.fc = nn.Linear(384, 512)
         self.action_head = nn.Linear(512, self.num_functions)
         self.value_head = nn.Linear(512, 1)
 
@@ -62,7 +62,7 @@ class A2CModel(nn.Module):
         xs = F.tanh(self.feature_input(game))
 
         # non-spatial policy
-        st = torch.cat([screen.view(-1, 1152), mm.view(-1, 1152), xs], dim=1)
+        st = torch.cat([screen.view(-1, 128), mm.view(-1, 128), xs], dim=1)
         ns = F.relu(self.fc(st))
 
         # critic prediction
@@ -98,19 +98,19 @@ class A2CModel(nn.Module):
     def evaluate_actions(self, screens, minimaps, games, actions, x1s, y1s):
         logits, x1_logits, y1_logits, values = self(screens, minimaps, games)
 
-        log_probs = F.log_softmax(logits)
+        #log_probs = F.log_softmax(logits)
         action_nlp = self.neglogp(logits, actions.squeeze(1))
         dist_entropy = self.entropy(logits)
 
-        x1_log_probs = F.log_softmax(x1_logits)
+        #x1_log_probs = F.log_softmax(x1_logits)
         x1_nlp = self.neglogp(x1_logits, x1s.squeeze(1))
         x1_entropy = self.entropy(x1_logits)
 
-        y1_log_probs = F.log_softmax(y1_logits)
+        #y1_log_probs = F.log_softmax(y1_logits)
         y1_nlp = self.neglogp(y1_logits, y1s.squeeze(1))
         y1_entropy = self.entropy(y1_logits)
 
-        neg_logpac = action_nlp + x1_nlp + y1_nlp
+        #neg_logpac = action_nlp + x1_nlp + y1_nlp
         entropy = dist_entropy + x1_entropy + y1_entropy
 
-        return values, neg_logpac, entropy
+        return values, entropy, action_nlp, x1_nlp, y1_nlp

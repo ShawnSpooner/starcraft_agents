@@ -15,11 +15,14 @@ from starcraft_agents.fully_conv_model import FullyConvModel
 from starcraft_agents.learning_agent import LearningAgent
 from starcraft_agents.saved_actions import SavedActions
 
-expirement_name = "lings_1"
-
 class A2CAgent(LearningAgent):
     """The start of a basic A2C agent for learning agents."""
-    def __init__(self, screen_width=64, screen_height=64, horizon=40, num_processes=1, fully_conv=False, expirement_name=expirement_name):
+    def __init__(self, screen_width=32, screen_height=32, horizon=40,
+                 num_processes=1,
+                 fully_conv=False,
+                 expirement_name="default_expirement",
+                 learning_rate=7e-3,
+                 value_coef=0.5):
         super(A2CAgent, self).__init__(expirement_name)
         num_functions = len(actions.FUNCTIONS)
         if fully_conv:
@@ -39,7 +42,7 @@ class A2CAgent(LearningAgent):
         self.num_processes = num_processes
         self.max_grad = 0.6
         self.entropy_coef = 0.01
-        self.value_coef = 0.5
+        self.value_coef = value_coef
         self.episode_rewards = torch.zeros([num_processes, 1])
         self.final_rewards = torch.zeros([num_processes, 1])
         self.gamma = 0.99
@@ -51,9 +54,9 @@ class A2CAgent(LearningAgent):
         #self.model.load_state_dict(torch.load(f"./{expirement_name}.pth"))
         #self.model.eval()
         self.optimizer = optim.RMSprop(self.model.parameters(),
-                                        lr=7e-3,
-                                        eps=1e-10,
-                                        alpha=0.99)
+                                       lr=learning_rate,
+                                       eps=1e-10,
+                                       alpha=0.99)
         self.final_rewards = torch.zeros(1, 1)
 
     def rollout(self):
@@ -71,13 +74,17 @@ class A2CAgent(LearningAgent):
         actions = Variable(st.actions[:self.rollout_step].squeeze(1)).cuda()
         x1s = Variable(st.x1s[:self.rollout_step].squeeze(1)).cuda()
         y1s = Variable(st.y1s[:self.rollout_step].squeeze(1)).cuda()
+        rewards = Variable(st.rewards[:self.rollout_step].squeeze(1).cuda())
 
-        values, logpac, entropy = self.model.evaluate_actions(screens, minimaps, games, actions, x1s, y1s)
+        values, entropy, lp, x_lp, y_lp = self.model.evaluate_actions(screens, minimaps, games, actions, x1s, y1s)
+        adv_var = Variable(advantages).cuda()
 
         dist_entropy = self.entropy_coef * entropy.mean()
-        pg_loss = (Variable(advantages).cuda() * logpac).mean()
+        pg_loss = ((adv_var * lp).mean() +
+                  (adv_var * x_lp).mean() +
+                  (adv_var * y_lp).mean())
         pg_loss = pg_loss - dist_entropy
-        vf_loss = advantages.pow(2).mean()
+        vf_loss = (values - rewards).pow(2).mean()
 
         train_loss = pg_loss + self.value_coef * vf_loss
 
@@ -89,7 +96,7 @@ class A2CAgent(LearningAgent):
         self.optimizer.step()
 
         self.model.summary.add_scalar_value("reward", int(self.reward))
-        self.model.summary.add_scalar_value("value_loss", vf_loss)
+        self.model.summary.add_scalar_value("value_loss", vf_loss.data[0])
         self.model.summary.add_scalar_value("loss", train_loss.data[0])
         self.model.summary.add_scalar_value("dist_entropy", dist_entropy.data[0])
 

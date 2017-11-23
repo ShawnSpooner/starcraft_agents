@@ -3,8 +3,8 @@ import numpy as np
 
 class SavedActions(object):
     def __init__(self, num_steps, num_processes, action_space):
-        self.screens = torch.zeros(num_steps + 1, num_processes, 16, 64, 64)
-        self.minimaps = torch.zeros(num_steps + 1, num_processes, 16, 64, 64)
+        self.screens = torch.zeros(num_steps + 1, num_processes, 16, 32, 32)
+        self.minimaps = torch.zeros(num_steps + 1, num_processes, 16, 32, 32)
         self.games = torch.zeros(num_steps + 1, num_processes, 11)
         self.masks = torch.zeros(num_steps + 1, num_processes, 1)
         self.rewards = torch.zeros(num_steps, num_processes, 1)

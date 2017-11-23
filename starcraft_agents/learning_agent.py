@@ -34,6 +34,9 @@ class LearningAgent(base_agent.BaseAgent):
         self.expirement_name = expirement_name
         self.rollout_step = 0
         self.episode_rewards = torch.zeros(1, 1)
+        self.episodes = 0
+        self.steps = 0
+        self.reward = 0
 
         self.embeddings = {"screen": self.build_embeddings(features.SCREEN_FEATURES),
                            "minimap": self.build_embeddings(features.MINIMAP_FEATURES)}
@@ -50,22 +53,6 @@ class LearningAgent(base_agent.BaseAgent):
 
         return screen, minimap, game, torch.from_numpy(allowed_actions).long()
 
-    def process(self, feature_layers, feature_space=features.SCREEN_FEATURES):
-        layer_count, screen_width, screen_height = feature_layers.shape
-        layers = torch.zeros(layer_count, screen_width, screen_height)
-
-        for i in range(layer_count):
-            # if the feature layer type is scalar, log scale it
-            if feature_space[i].type == features.FeatureType.SCALAR:
-                l = torch.log(torch.from_numpy(feature_layers[i] + np.finfo(float).eps))
-                layers[i].copy_(l)
-            # otherwise follow the paper and make it continous
-            else:
-                l = torch.from_numpy(feature_layers[i] / feature_space[i].scale)
-                layers[i].copy_(l)
-
-        return layers
-
     def embed(self, feature_layers, embedding_dim=8, space="screen"):
         layer_count, screen_width, screen_height = feature_layers.shape
 
@@ -79,7 +66,7 @@ class LearningAgent(base_agent.BaseAgent):
             if l.name in allowed_layers:
                 embedding = self.embeddings[space][l.name]
                 embedded = embedding(Variable(torch.from_numpy(feature_layers[l.index])).long())
-                layers[current_layer] = embedded.view(1, 8, self.screen_height, self.screen_width).data
+                layers[current_layer] = embedded.view(1, embedding_dim, self.screen_height, self.screen_width).data
                 current_layer += 1
 
         return torch.cat(layers, dim=0)
@@ -131,5 +118,5 @@ class LearningAgent(base_agent.BaseAgent):
         if self.steps > 1:
             self.rollout()
 
-        torch.save(self.model.state_dict(), f"./{self.expirement_name}.pth")
+        torch.save(self.model.state_dict(), f"./models/{self.expirement_name}.pth")
         self.saved_actions.reset()

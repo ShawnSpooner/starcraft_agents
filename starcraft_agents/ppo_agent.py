@@ -20,7 +20,7 @@ expirement_name = "ppo_lings_1"
 
 class PPOAgent(LearningAgent):
     """The start of a basic PPO agent for Starcraft."""
-    def __init__(self, screen_width=64, screen_height=64, horizon=40, num_processes=1, expirement_name=expirement_name):
+    def __init__(self, screen_width=64, screen_height=64, horizon=128, num_processes=1, expirement_name=expirement_name):
         super(PPOAgent, self).__init__(expirement_name)
         num_functions = len(actions.FUNCTIONS)
         self.model = PPOModel(num_functions=num_functions, expirement_name=expirement_name).cuda()
@@ -35,7 +35,7 @@ class PPOAgent(LearningAgent):
         self.gamma = 0.99
         self.tau = 0.97
         self.entropy_coef = 0.01
-        self.value_coef = 0.
+        self.value_coef = 0.5
         self.clip_param = 0.2
         self.saved_actions = SavedActions(self.horizon,
                                           1,
