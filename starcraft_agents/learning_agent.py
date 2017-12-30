@@ -45,34 +45,46 @@ class LearningAgent(base_agent.BaseAgent):
         screen = obs.observation["screen"]
         minimap = obs.observation["minimap"]
         game = obs.observation["player"]
+        #allowed_actions = [o for o in obs.observation["available_actions"] if o in [0,7,333, 334, 12, 13]]
         allowed_actions = obs.observation["available_actions"]
+
+        allowed_vec = np.zeros(524)
+        allowed_vec[allowed_actions] = 1
 
         screen = self.embed(screen, space="screen").unsqueeze(0)
         minimap = self.embed(minimap, space="minimap").unsqueeze(0)
         game = torch.log(torch.from_numpy(game).float().unsqueeze(0))
 
-        return screen, minimap, game, torch.from_numpy(allowed_actions).long()
+        return screen, minimap, game, torch.from_numpy(allowed_vec).float()
 
     def embed(self, feature_layers, embedding_dim=8, space="screen"):
-        layer_count, screen_width, screen_height = feature_layers.shape
+        layer_count, screen_height, screen_width = feature_layers.shape
 
         feature_space = features.SCREEN_FEATURES if space == "screen" else features.MINIMAP_FEATURES
         # layers we are using: player_id, player_relative, selected, unit_type
-        allowed_layers = ["player_relative", "visibility_map"]
-        layers = torch.zeros(len(allowed_layers), embedding_dim, screen_width, screen_height)
+        allowed_layers = ["player_relative"]
+        layers = torch.zeros(len(allowed_layers), screen_width, screen_height)
         current_layer = 0
 
         for l in feature_space:
             if l.name in allowed_layers:
-                embedding = self.embeddings[space][l.name]
-                embedded = embedding(Variable(torch.from_numpy(feature_layers[l.index])).long())
-                layers[current_layer] = embedded.view(1, embedding_dim, self.screen_height, self.screen_width).data
-                current_layer += 1
+                #transpose yx into xy
+                v = torch.t(torch.from_numpy(feature_layers[l.index]).long())
+                layers[current_layer] = v
+        return layers.long()
+        # the concat route
+        #return torch.cat(layers, dim=0)
+        # the sum over channels route
+        return torch.sum(layers, dim=0)
 
-        return torch.cat(layers, dim=0)
-
-    def step(self, obs):
+    def step(self, step, pid, obs):
         super(LearningAgent, self).step(obs)
+
+        # if this was a last step, log the score
+        if obs.last():
+            print("ending score was: ", obs.observation["score_cumulative"][0])
+            self.episode_meter.add(int(obs.observation["score_cumulative"][0]))
+
         self.rollout_step += 1
 
         reward = torch.from_numpy(np.expand_dims(obs.reward, 1)).float()
@@ -88,12 +100,13 @@ class LearningAgent(base_agent.BaseAgent):
         act_args = []
         for args in actions.FUNCTIONS[function_id].args:
             if args.name in ['screen', 'minimap', 'screen2']:
-                act_args.append([x1.data[0, 0], y1.data[0, 0]])
+                act_args.append([x1.data[0], y1.data[0]])
             else:
                 act_args.append([0])
 
-        mask = torch.FloatTensor([0.0] if obs.step_type == 2 else [1.0])
-        self.saved_actions.insert(self.rollout_step,
+        dones = torch.FloatTensor([1.0] if obs.first() else [0.0])
+        self.saved_actions.insert(
+                                  pid,
                                   screen,
                                   minimap,
                                   game,
@@ -102,21 +115,11 @@ class LearningAgent(base_agent.BaseAgent):
                                   y1.data,
                                   value_pred.data,
                                   reward,
-                                  mask)
-
-        if self.rollout_step == self.horizon:
-            self.rollout()
-
+                                  dones)
+        #print(function_id, act_args)
         return actions.FunctionCall(function_id, act_args)
 
     def reset(self):
         super(LearningAgent, self).reset()
-        self.model.summary.add_scalar_value("episode_reward",
-                                            int(self.episode_rewards[0, 0]))
-        self.episode_rewards = torch.zeros(1, 1)
-
-        if self.steps > 1:
-            self.rollout()
 
         torch.save(self.model.state_dict(), f"./models/{self.expirement_name}.pth")
-        self.saved_actions.reset()
